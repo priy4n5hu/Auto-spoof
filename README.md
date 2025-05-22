@@ -58,7 +58,27 @@ AutoSpoof is an automated offensive cybersecurity tool for ethical hacking and p
 - 🔄 Planned: HTTPS downgrade detection.
 - 🚧 Future: Real-time monitoring UI.
 
-## 🤝 Contributions
 
-Contributions welcome! Open issues and submit pull requests.
+## 🛠️ Troubleshooting
+
+To enable port forwarding and NFQUEUE for DNS interception:
+
+1. Enable IP forwarding:
+   ```bash
+   echo 1 > /proc/sys/net/ipv4/ip_forward
+   ```
+
+2. Redirect packets to NFQUEUE for processing:
+   ```bash
+   iptables -I FORWARD -j NFQUEUE --queue-num 1
+   iptables -I OUTPUT -p udp --dport 53 -j NFQUEUE --queue-num 1
+   iptables -I INPUT -p udp --sport 53 -j NFQUEUE --queue-num 1
+   ```
+
+3. Allow forwarding on your network interface (`yourinterface`):
+   ```bash
+   iptables -A FORWARD -i yourinterface -j ACCEPT
+   iptables -A FORWARD -o yourinterface -j ACCEPT
+   ```
+
 
