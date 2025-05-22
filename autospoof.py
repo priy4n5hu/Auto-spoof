@@ -20,6 +20,7 @@ arp_thread = None
 arp_running = False
 target_ip = ""
 gateway_ip = ""
+interface = ""
 
 def network_scanner():
     ip = input("Enter IP address or IP range to scan: ").strip()
@@ -27,7 +28,7 @@ def network_scanner():
     output(results)
 
 def start_arp_spoofer():
-    global arp_thread, arp_running, target_ip, gateway_ip
+    global arp_thread, arp_running, target_ip, gateway_ip, interface
 
     if arp_running:
         print("[!] ARP Spoofer is already running.")
@@ -35,15 +36,18 @@ def start_arp_spoofer():
 
     target_ip = input("Enter Target IP Address (Victim): ").strip()
     gateway_ip = input("Enter Gateway IP Address (Router): ").strip()
+    interface = input("Enter network interface (e.g., wlan0, eth0): ").strip()
+
+    # Print spoofing banner immediately
+    print(f"\n[+] Spoofing {target_ip} <--> {gateway_ip} ... Press CTRL+C to stop.\n")
 
     def spoof_loop():
         global arp_running
         try:
-            run_spoofer(target_ip, gateway_ip, quiet=True)
+            run_spoofer(target_ip, gateway_ip, interface, quiet=True)
         finally:
             arp_running = False
 
-    print(f"[+] Launching ARP Spoofer in background...")
     arp_running = True
     arp_thread = threading.Thread(target=spoof_loop, daemon=True)
     arp_thread.start()
@@ -88,8 +92,24 @@ def dns_spoofing():
     except KeyboardInterrupt:
         print("\n[+] DNS Spoofing stopped.")
 
+def print_banner():
+    print(r"""
+   _____          __                                      _____ 
+  /  _  \  __ ___/  |_  ____  ____________   ____   _____/ ____\
+ /  /_\  \|  |  \   __\/  _ \/  ___/\____ \ /  _ \ /  _ \   __\ 
+/    |    \  |  /|  | (  <_> )___ \ |  |_> >  <_> |  <_> )  |   
+\____|__  /____/ |__|  \____/____  >|   __/ \____/ \____/|__|   
+        \/                       \/  |__|                         
+
+            Coded by Priyanshu and Ishan Shridhar
+Disclaimer: This tool is for educational and authorized penetration tests only. 
+    Always obtain permission before use. Misuse may lead to legal consequences.
+------------------------------------------------------------------
+""")
+
 def main():
     global arp_running
+    print_banner()
     while True:
         menu = (
             "\nAutospoof Toolkit - Menu:\n"
