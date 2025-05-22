@@ -66,6 +66,3 @@ This tool is for educational and authorized penetration tests only. Always obtai
 
 Contributions welcome! Open issues and submit pull requests.
 
-## 📄 License
-
-MIT License. See the LICENSE file for details.
