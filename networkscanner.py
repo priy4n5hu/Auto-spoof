@@ -1,29 +1,28 @@
-# network_scanner.py
-from scapy.all import ARP, Ether, srp
+#!/usr/bin/env python3
+import scapy.all as scapy
 
-def scan(ip_range):
-    print("[*] Scanning the network...")
-    arp = ARP(pdst=ip_range)
-    ether = Ether(dst="ff:ff:ff:ff:ff:ff")
-    packet = ether/arp
-    result = srp(packet, timeout=3, verbose=0)[0]
+def scan(ip):
+    """
+    Scans the network for active devices.
+    Returns a list of dictionaries with 'ip' and 'mac' keys.
+    """
+    arp_request = scapy.ARP(pdst=ip)
+    broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+    arp_request_broadcast = broadcast / arp_request
+    answered_list = scapy.srp(arp_request_broadcast, timeout=2, verbose=False)[0]
 
-    devices = []
-    for sent, received in result:
-        devices.append({'ip': received.psrc, 'mac': received.hwsrc})
-    return devices
-# network_scanner.py
-from scapy.all import ARP, Ether, srp
+    clients = []
+    for element in answered_list:
+        client_dict = {"ip": element[1].psrc, "mac": element[1].hwsrc}
+        clients.append(client_dict)
 
-def scan(ip_range):
-    print("[*] Scanning the network...")
-    arp = ARP(pdst=ip_range)
-    ether = Ether(dst="ff:ff:ff:ff:ff:ff")
-    packet = ether/arp
-    result = srp(packet, timeout=3, verbose=0)[0]
+    return clients
 
-    devices = []
-    for sent, received in result:
-        devices.append({'ip': received.psrc, 'mac': received.hwsrc})
-    return devices
-
+def output(results):
+    """
+    Prints the results of the network scan in a formatted table.
+    """
+    print("\nIP Address\t\tMAC Address")
+    print("-----------------------------------------")
+    for client in results:
+        print(f"{client['ip']}\t\t{client['mac']}")
