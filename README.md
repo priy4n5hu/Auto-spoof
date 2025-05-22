@@ -1,6 +1,6 @@
 # 🛠️ AutoSpoof — Offensive Cybersecurity Toolkit
 
-AutoSpoof is an automated offensive cybersecurity tool for ethical hacking and penetration testing. It performs network scanning, ARP spoofing, DNS spoofing, and HTTP website cloning to simulate Man-in-the-Middle (MITM) attacks in local networks. Ideal for cybersecurity research and educational demonstrations.
+AutoSpoof is an automated offensive cybersecurity tool designed for ethical hacking and penetration testing. It performs network scanning, ARP spoofing, DNS spoofing, and HTTP website cloning to simulate Man-in-the-Middle (MITM) attacks for educational and research purposes.
 
 > ⚠️ Disclaimer: This tool is for educational and authorized penetration tests only. Always obtain permission before use. Misuse may lead to legal consequences.
 
