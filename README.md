@@ -2,7 +2,7 @@
 
 AutoSpoof is an automated offensive cybersecurity tool for ethical hacking and penetration testing. It performs network scanning, ARP spoofing, DNS spoofing, and HTTP website cloning to simulate Man-in-the-Middle (MITM) attacks in local networks. Ideal for cybersecurity research and educational demonstrations.
 
-> ⚠️ Disclaimer: Use only in authorized, controlled environments. Unauthorized use is illegal.
+> ⚠️ Disclaimer: This tool is for educational and authorized penetration tests only. Always obtain permission before use. Misuse may lead to legal consequences.
 
 ## 📌 Features
 
@@ -51,10 +51,6 @@ AutoSpoof is an automated offensive cybersecurity tool for ethical hacking and p
     ```bash
     sudo python3 clone_sites.py
     ```
-
-## ⚠️ Ethical Notice
-
-This tool is for educational and authorized penetration tests only. Always obtain permission before use. Misuse may lead to legal consequences.
 
 ## 📚 Project Status
 
