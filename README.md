@@ -21,7 +21,7 @@ AutoSpoof is an automated offensive cybersecurity tool designed for ethical hack
    ```
 2. Install dependencies:
    ```
-   pip install scapy colorama requests beautifulsoup4
+   pip install scapy colorama requests beautifulsoup4 netfilterqueue
    ```
 3. Grant root privileges for packet operations:
    ```bash
